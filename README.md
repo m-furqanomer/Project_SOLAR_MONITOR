@@ -294,6 +294,7 @@ This project is open-source and available under the MIT License.
 ## 👨‍💻 Author
 
 **Muhammad Furqan Omer**
+
 Computer Engineering Graduate
 Embedded Systems | Renewable Energy Monitoring | IoT Development
 
