@@ -115,7 +115,7 @@ void readINA219(float &busVoltage_V,
 
   // Convert values
   current_A = ina219.getCurrent_mA();
-  power_W = ina219.getPower_mW() / 1000;
+  power_W = ina219.getPower_mW() / 1000.00;
 
   // Calculate load voltage
   loadVoltage_V = busVoltage_V + (shuntVoltage_mV / 1000.0);
