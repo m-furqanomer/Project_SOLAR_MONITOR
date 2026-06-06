@@ -2,9 +2,13 @@
 #include <Adafruit_INA219.h>
 #include <LiquidCrystal_I2C.h>
 
-#define ACS712_PIN A0
-#define RELAY_PIN 7
-#define BATTERY_VOLTAGE_PIN A2
+// #define ACS712_PIN A0
+// #define RELAY_PIN 7
+// #define BATTERY_VOLTAGE_PIN A2
+
+const int ACS712_PIN = A0;
+const int BATTERY_VOLTAGE_PIN = A2;
+const int RELAY_PIN = 7;
 
 // ======================================================
 // LCD CONFIGURATION
@@ -89,10 +93,10 @@ void readACS712(float &busVoltage, float &current) {
 
 void readBatteryVoltage(float &voltage) {
   int rawADC = analogRead(BATTERY_VOLTAGE_PIN);  // A2
-  Serial.println();
-  Serial.print("RAW ADC VAlues: ");
-  Serial.print(rawADC);
-  Serial.println();
+  // Serial.println();
+  // Serial.print("RAW ADC VAlues: ");
+  // Serial.print(rawADC);
+  // Serial.println();
   voltage = rawADC * CALIBRATION_FACTOR;
   return;
 }
@@ -111,7 +115,7 @@ void readINA219(float &busVoltage_V,
 
   // Convert values
   current_A = ina219.getCurrent_mA();
-  power_W = ina219.getPower_mW() / 1000.0;
+  power_W = ina219.getPower_mW() / 1000;
 
   // Calculate load voltage
   loadVoltage_V = busVoltage_V + (shuntVoltage_mV / 1000.0);
@@ -122,17 +126,10 @@ void readINA219(float &busVoltage_V,
 // ======================================================
 void relayControl(bool state) {
   if (state) {
-    digitalWrite(RELAY_PIN, HIGH);  // Relay ON
+    digitalWrite(RELAY_PIN, LOW);  // Relay ON
   } else {
-    digitalWrite(RELAY_PIN, LOW);  // Relay OFF
+    digitalWrite(RELAY_PIN, HIGH);  // Relay OFF
   }
-}
-
-// ======================================================
-// FUNCTION TO TOGGLE RELAY
-// ======================================================
-void toggleRelay() {
-  digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
 }
 
 // ======================================================
@@ -141,7 +138,7 @@ void toggleRelay() {
 void printACS712(float busVoltage, float current) {
   Serial.println("----------------- ACS-712 -----------------");
 
-  Serial.print("Bus Voltage: ");
+  Serial.print("Battery Voltage: ");
   Serial.print(busVoltage, 2);
   Serial.print(" V");
 
@@ -173,7 +170,7 @@ void printINA219(float busVoltage_V,
 
   Serial.print("Current:       ");
   Serial.print(current_A, 2);
-  Serial.println(" A");
+  Serial.println(" mA");
 
   Serial.print("Power:         ");
   Serial.print(power_W, 2);
@@ -262,7 +259,7 @@ void printINA219(float busVoltage_V,
 void displayPowerData(float pvVoltage, float pvCurrent,
                       float btVoltage, float btCurrent) {
   // Calculate Power
-  float pvPower = pvVoltage * pvCurrent;
+  float pvPower = pvVoltage * (pvCurrent / 1000);
   float btPower = btVoltage * btCurrent;
 
   // REMOVED lcd.clear() to stop screen flickering.
@@ -321,6 +318,7 @@ float current_ACS;
 
 // variable Battery Voltage
 float batteryVoltage = 0;
+bool state = false;
 
 // ======================================================
 // SETUP
@@ -328,30 +326,46 @@ float batteryVoltage = 0;
 void setup() {
   Serial.begin(9600);
 
-  // Relay Setup
-  pinMode(RELAY_PIN, OUTPUT);
-
-  // Initial State OFF
-  digitalWrite(RELAY_PIN, LOW);
-
   lcd.init();
   lcd.backlight();
 
   pinMode(ACS712_PIN, INPUT);           // A0
   pinMode(BATTERY_VOLTAGE_PIN, INPUT);  // A2
+  pinMode(RELAY_PIN, OUTPUT);           // 7
+
+  // Initial State OFF
+  digitalWrite(RELAY_PIN, HIGH);
 
   Serial.println();
   Serial.println("ACS712 SENSOR INITIALIZED");
 
-  if (!ina219.begin()) {
-    Serial.println("Failed to find INA219 chip");
+  // if (!ina219.begin()) {
+  //   Serial.println("Failed to find INA219 chip");
 
-    while (1) {
-      delay(10);
+  //   while (1) {
+  //     delay(10);
+  //   }
+
+  // }
+
+  int timeoutCounter = 0;
+  Serial.println("Initializing INA219...");
+
+  while (!ina219.begin()) {
+    Serial.println("Failed to find INA219 chip. Retrying...");
+    delay(100);  // Wait 100ms between checks
+    timeoutCounter++;
+
+    if (timeoutCounter >= 100) {  // 100 turns * 100ms = 10000ms (10 seconds)
+      Serial.println("Sensor failed to initialize completely! Moving on...");
+      break;  // Safely exits the while loop after 10 seconds
     }
   }
 
-  Serial.println("INA219 Sensor Initialized");
+  if (ina219.begin()) {
+    Serial.println("INA219 Sensor Initialized");
+  }
+
   Serial.println("SYSTEM INITIALIZED");
 
   delay(1000);
@@ -372,6 +386,16 @@ void loop() {
   readACS712(voltage, current_ACS);
   readBatteryVoltage(batteryVoltage);
 
+  // RELAY IS ACTIVE LOW, When Battery Voltage will be Above 11-Volts, The loads Stays ON.
+  // Load is Conneted between the Normally Open and Common Terminal.
+  //batteryVoltage = 10.99;
+  if (batteryVoltage >= 11.00) {
+    state = true;
+  } else {
+    state = false;
+  }
+
+  relayControl(state);  // RELAY_PIN 7
 
   // Print Function
   printINA219(busVoltage,
@@ -382,7 +406,8 @@ void loop() {
 
   printACS712(batteryVoltage, current_ACS);
 
+  // Send Data to Display
   displayPowerData(loadVoltage, current_INA, batteryVoltage, current_ACS);
 
-  delay(500);
+  delay(2000);
 }
